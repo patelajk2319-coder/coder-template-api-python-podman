@@ -38,12 +38,22 @@ coder_login
 echo "[info] Authenticated as ${CODER_ADMIN_EMAIL}"
 
 # ── Provision workspace ────────────────────────────────────────────────────────
-echo "[----] Provisioning workspace '${WORKSPACE_NAME}'..."
-echo "[info] Template: api-python-podman-workspace"
-echo ""
+echo "[----] Provisioning workspace '${WORKSPACE_NAME}' (template: api-python-podman-workspace)..."
 
-coder create "${WORKSPACE_NAME}" \
+# coder create always streams terraform init boilerplate and a resource
+# preview table — neither is useful here. Capture it, show it only on
+# failure.
+BUILD_LOG="$(mktemp)"
+trap 'rm -f "${BUILD_LOG}"' EXIT
+
+if coder create "${WORKSPACE_NAME}" \
   --template api-python-podman-workspace \
   --parameter instance_size=medium \
   --parameter repo_url="${WORKSPACE_REPO}" \
-  --yes
+  --yes >"${BUILD_LOG}" 2>&1; then
+  echo "[info] Workspace '${WORKSPACE_NAME}' created"
+else
+  echo "[error] Workspace creation failed — full output:" >&2
+  cat "${BUILD_LOG}" >&2
+  exit 1
+fi

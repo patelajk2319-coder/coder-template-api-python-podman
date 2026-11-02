@@ -34,7 +34,17 @@ require_coder_reachable
 VERSION="$(cat "${ROOT_DIR}/VERSION")"
 
 echo "[----] Pushing api-python-podman-workspace@${VERSION} to ${CODER_URL}..."
-terraform -chdir="${TF_DIR}" init -upgrade
+
+# terraform init's own boilerplate (provider-signing notice, "successfully
+# initialized") isn't useful here — only show it if init actually fails.
+INIT_LOG="$(mktemp)"
+trap 'rm -f "${INIT_LOG}"' EXIT
+if ! terraform -chdir="${TF_DIR}" init >"${INIT_LOG}" 2>&1; then
+  echo "[error] terraform init failed — full output:" >&2
+  cat "${INIT_LOG}" >&2
+  exit 1
+fi
+
 terraform -chdir="${TF_DIR}" apply \
   -var="coder_url=${CODER_URL}" \
   -var="coder_api_token=${CODER_API_TOKEN}" \

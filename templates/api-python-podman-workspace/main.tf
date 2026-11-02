@@ -3,12 +3,16 @@ terraform {
 
   required_providers {
     coder = {
-      source  = "coder/coder"
-      version = "~> 2.1"
+      source = "coder/coder"
+      # Exact, not ~> — Coder's provisioner runs init -upgrade on every
+      # build, so a floating constraint re-touches the lock file (and
+      # prints "made changes to provider dependency selections") on every
+      # new matching release. Bump deliberately when you want a newer one.
+      version = "2.20.0"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 2.30"
+      version = "2.38.0"
     }
   }
 }
