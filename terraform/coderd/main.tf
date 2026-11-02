@@ -5,9 +5,7 @@ data "coderd_organization" "default" {
 locals {
   governance_description = "owner: ${var.template_owner} | cost-centre: ${var.template_cost_centre} | team: ${var.template_team} | env: ${var.template_env}"
 
-  # regex() with capture groups returns a tuple of the captured substrings —
-  # keeps .env's human-friendly "4h"/"1h" format unchanged, parsed in HCL
-  # instead of a bash duration parser.
+  # Parses .env's "4h"/"1h" format in HCL, not bash.
   default_ttl_ms   = tonumber(regex("^([0-9]+)h$", var.template_default_ttl)[0]) * 3600000
   activity_bump_ms = tonumber(regex("^([0-9]+)h$", var.template_activity_bump)[0]) * 3600000
 
@@ -16,12 +14,8 @@ locals {
     value = split("=", var.provisioner_tag)[1]
   }]
 
-  # Tells the template which node pool to target on the external cluster
-  # that provisioner_tags routes it to — see
-  # templates/api-python-podman-workspace's var.team_node_pool. Only one
-  # external cluster exists today, so this is a flat "tagged or not"
-  # coupling; a second one would need its own node-pool value, not just
-  # this boolean.
+  # Node pool for the external cluster provisioner_tags routes to — see
+  # var.team_node_pool in the workspace template.
   tf_vars = var.provisioner_tag == "" ? [] : [{
     name  = "team_node_pool"
     value = "workspaces"

@@ -13,12 +13,8 @@ terraform {
   }
 }
 
-# Set via coderd_template's versions[].tf_vars in terraform/coderd/main.tf,
-# per pushed template version — not a coder_parameter, since this isn't a
-# user-facing choice. Empty means "the default/built-in provisioner" (no
-# node-pool taints exist there to target); non-empty names a labeled,
-# tainted node pool this workspace must schedule onto instead, for template
-# versions routed to an external provisioner whose cluster has one.
+# Set per template version via terraform/coderd's tf_vars. Empty = default
+# provisioner; non-empty = tainted node-pool name to schedule onto.
 variable "team_node_pool" {
   type    = string
   default = ""
@@ -29,9 +25,7 @@ variable "team_node_pool" {
 data "coder_workspace" "me" {}
 data "coder_workspace_owner" "me" {}
 
-# Each developer authorizes their own GitHub identity once via the dashboard —
-# no shared PAT baked into the template. Requires CODER_EXTERNAL_AUTH_0_ID=github
-# configured on the control plane.
+# Per-developer GitHub auth — requires CODER_EXTERNAL_AUTH_0_ID=github on the control plane.
 data "coder_external_auth" "github" {
   id = "github"
 }
@@ -95,8 +89,7 @@ resource "kubernetes_namespace" "workspace" {
 }
 
 # ── Network policy — egress allowlist ─────────────────────────────────────────
-# Registry pulls for the rootless podman build (auth + layer blobs) go over
-# 443 same as any other HTTPS traffic — no separate rule needed.
+# Podman's registry pulls ride the 443 rule below — no separate rule needed.
 
 resource "kubernetes_network_policy" "workspace_egress" {
   metadata {
@@ -143,11 +136,8 @@ resource "kubernetes_persistent_volume_claim" "home" {
     access_modes       = ["ReadWriteOnce"]
     storage_class_name = "gp3"
     resources {
-      # 10Gi was too tight in practice — real usage has hit 47-50GB on
-      # comparable workspaces. resources_monitoring below gives an early
-      # warning at 90%; this just sets the ceiling that warning has room
-      # under. Podman's rootless storage (under $HOME/.local/share/containers)
-      # lands on this same PVC — see storage driver note in startup_script.
+      # 10Gi was too tight in practice — real usage has hit 47-50GB.
+      # Podman's rootless storage lands on this same PVC.
       requests = { storage = "50Gi" }
     }
   }
@@ -161,9 +151,7 @@ resource "coder_agent" "main" {
   arch = "amd64"
   os   = "linux"
 
-  # Alerts in the Coder dashboard at 90% disk usage — distinct from the
-  # "Disk" metadata block below, which is just a display value with no
-  # threshold. PVC fills are the #1 cause of silent workspace failures.
+  # Dashboard alert at 90% disk — PVC fills are the #1 cause of silent failures.
   resources_monitoring {
     volume {
       path      = "/home/coder"
@@ -174,9 +162,7 @@ resource "coder_agent" "main" {
 
   env = {
     GITHUB_TOKEN = data.coder_external_auth.github.access_token
-    # Lets api-python-podman's own `task build` print the exact port-forward
-    # command — unset when api-python-podman is run standalone outside a
-    # Coder workspace.
+    # Lets `task build` print the port-forward command for this workspace.
     CODER_WORKSPACE_NAME = data.coder_workspace.me.name
   }
 
@@ -187,9 +173,7 @@ resource "coder_agent" "main" {
     #!/bin/bash
     set -e
 
-    # Tools install into $HOME/.local/bin on the PVC — first boot installs, restarts skip.
-    # $HOME/.venv/bin takes priority so task run's bare `uvicorn` resolves there,
-    # not the base image's externally-managed system Python.
+    # Tools land on the PVC — first boot installs, restarts skip.
     mkdir -p "$HOME/.local/bin"
     export PATH="$HOME/.venv/bin:$HOME/.local/bin:$PATH"
     grep -qxF 'export PATH="$HOME/.venv/bin:$HOME/.local/bin:$PATH"' "$HOME/.bashrc" || \
@@ -203,18 +187,14 @@ resource "coder_agent" "main" {
     git config --global credential.https://github.com.helper \
       "!f() { echo username=x-access-token; echo password=$${GITHUB_TOKEN}; }; f"
 
-    # ── Podman (rootless, daemonless — no privileged sidecar, unlike dind) ───
-    # codercom/enterprise-base:ubuntu grants the non-root "coder" user
-    # passwordless sudo precisely for installs like this one.
+    # ── Podman — rootless, daemonless, no sidecar needed ──────────────────────
+    # Base image's non-root user has passwordless sudo for this.
     if ! command -v podman &>/dev/null; then
       sudo apt-get update -qq
       sudo apt-get install -y -qq podman >/dev/null
     fi
 
-    # vfs is the only storage driver guaranteed to work rootless and
-    # unprivileged regardless of node kernel — overlay/fuse-overlayfs need
-    # CAP_SYS_ADMIN or /dev/fuse that this pod deliberately doesn't grant.
-    # Slower than overlay; fine for this demo's single image.
+    # vfs: rootless-safe without extra kernel capabilities (unlike overlay/fuse-overlayfs).
     mkdir -p "$HOME/.config/containers"
     if [[ ! -f "$HOME/.config/containers/storage.conf" ]]; then
       cat > "$HOME/.config/containers/storage.conf" <<-'CONF'
@@ -223,14 +203,13 @@ resource "coder_agent" "main" {
     CONF
     fi
 
-    # ── go-task (drives api-python-podman's own Taskfile — task build/test/run) ─
+    # ── go-task — drives the cloned repo's Taskfile ───────────────────────────
     if ! command -v task &>/dev/null; then
       sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b "$HOME/.local/bin" 2>/dev/null
     fi
 
     # ── Clone (or update) repository ───────────────────────────────────────────
-    # $HOME is a persistent PVC — on a restart this directory already exists
-    # from a previous boot, so pull the latest instead of only cloning once.
+    # $HOME persists on the PVC — pull latest instead of re-cloning on restart.
     REPO_DIR="${local.repo_dir}"
     if [[ ! -d "$REPO_DIR" ]]; then
       git clone --depth=1 "${data.coder_parameter.repo_url.value}" "$REPO_DIR"
@@ -239,16 +218,12 @@ resource "coder_agent" "main" {
         || echo "[warn] $REPO_DIR has local changes — skipped pulling latest"
     fi
 
-    # ── Python venv — mirrors a developer's own laptop setup, so task run's
-    # bare `uvicorn --reload` works the same as it would outside a workspace.
-    # $HOME is a persistent PVC — venv survives restarts, only created once;
-    # pip install re-runs every boot (cheap no-op) to pick up requirements.txt changes.
+    # ── Python venv — mirrors a local dev setup for task run's bare uvicorn ──
+    # Persists on the PVC; pip install re-runs each boot (cheap no-op).
     [[ -d "$HOME/.venv" ]] || python3 -m venv "$HOME/.venv"
     "$HOME/.venv/bin/pip" install --quiet -r "$REPO_DIR/requirements.txt"
 
-    # ── Rootless Podman demo: build and run api-python-podman locally ────────
-    # No daemon to wait on — podman forks containers directly, so this runs
-    # as soon as the binary is on PATH.
+    # No daemon to wait on — podman runs immediately.
     cd "$REPO_DIR"
     task build
   EOT
@@ -279,10 +254,8 @@ resource "coder_agent" "main" {
 }
 
 # ── Developer-facing access note ────────────────────────────────────────────────
-# Shown directly on the workspace page in the dashboard. Developers should
-# never need this repo, its .env, or admin credentials just to reach their own
-# workspace's API from a local tool — `coder port-forward` works for any
-# authenticated Coder user against workspaces they own.
+# Shown on the workspace page — devs reach their API via coder port-forward,
+# no admin access or this repo needed.
 
 resource "coder_metadata" "api_access" {
   count       = data.coder_workspace.me.start_count
@@ -307,21 +280,13 @@ module "code_server" {
 }
 
 # ── Workspace pod ──────────────────────────────────────────────────────────────
-# The build itself no longer waits through node scale-up/image pull (see
-# target_state below) — but Coder's dashboard still can't stream logs until
-# the agent inside this pod actually starts, so a cold node still shows as
-# "running, agent not connected" with no progress for a bit. Restarting
-# during that gap does not speed anything up; it cancels the in-flight build.
-#
-# Single container, unlike the sibling api-python-workspace template's
-# dind pair — rootless Podman needs no privileged daemon sidecar to talk to.
+# Single container — rootless Podman needs no privileged daemon sidecar.
 
 resource "kubernetes_pod" "workspace" {
   count = data.coder_workspace.me.start_count
 
-  # Default target_state=["Running"] blocks the build through node scale-up
-  # and image pull with zero log output. "Pending" covers both — returning
-  # there instead skips the wait without giving up direct-delete semantics.
+  # "Pending" skips the node-scale-up/image-pull wait without losing
+  # direct-delete semantics on workspace stop.
   target_state = ["Pending", "Running"]
 
   metadata {
@@ -345,9 +310,7 @@ resource "kubernetes_pod" "workspace" {
       fs_group        = 1000
     }
 
-    # Only set when routed to a cluster with a tainted workspaces node pool
-    # — see var.team_node_pool. Left unset, the pod schedules anywhere the
-    # default/built-in provisioner's cluster allows, same as before.
+    # Only set when routed to a tainted external node pool — see var.team_node_pool.
     node_selector = var.team_node_pool != "" ? {
       "coder.com/node-pool" = var.team_node_pool
     } : null

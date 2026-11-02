@@ -2,11 +2,8 @@
 
 Coder workspace template that provisions a developer environment for
 [api-python-podman](https://github.com/patelajk2319-coder/api-python-podman),
-demonstrating rootless Podman on Coder: a developer can `podman build`/`podman
-run` like they would locally, with no privileged daemon running anywhere in
-the pod. A sibling of
-[coder-template-api-python](https://github.com/patelajk2319-coder/coder-template-api-python),
-which demonstrates the same workflow with Docker-in-Docker instead.
+demonstrating rootless Podman on Coder — `podman build`/`podman run` with no
+privileged daemon anywhere in the pod.
 
 ## Versioning
 `task template` pushes a new Coder template revision named after whatever's
@@ -57,28 +54,18 @@ Nothing here is auto-populated by scripts — every variable is yours to fill in
 
 ## How it works
 
-Each workspace is a single Kubernetes pod, one non-root container — unlike
-`coder-template-api-python`'s workspace+dind pair, there's no privileged
-sidecar to run at all:
+Single Kubernetes pod, one non-root container (`run_as_user = 1000`), with
+`/home/coder` on a `gp3`-backed PVC.
 
-- **workspace** — the developer's shell/IDE, non-root (`run_as_user = 1000`,
-  `run_as_non_root = true`), with a persistent `/home/coder` on a `gp3`
-  EBS-backed PVC.
-- **Podman**, installed via `apt-get` on first boot, builds and runs images
-  directly inside that container as the same non-root user — no daemon, no
-  socket, no elevated container anywhere in the pod. Storage uses the `vfs`
-  driver (`$HOME/.config/containers/storage.conf`), the one driver guaranteed
-  to work rootless and unprivileged regardless of the node's kernel — overlay
-  and fuse-overlayfs both need capabilities this pod deliberately doesn't
-  grant. It's slower than overlay but irrelevant at this demo's scale, and
-  the image layers it writes land on the same persistent PVC as `/home/coder`.
+Podman installs via `apt-get` on first boot and builds/runs images directly
+as that same non-root user — no daemon, no sidecar. Storage uses the `vfs`
+driver (`$HOME/.config/containers/storage.conf`), the one driver that works
+rootless without extra kernel capabilities; image layers land on the same
+PVC as `/home/coder`.
 
-The pod's own namespace (`coder-ws-<owner>-<workspace>`) still carries the
-same egress NetworkPolicy (DNS, HTTP, HTTPS only) as any other workspace on
-this platform — Podman's registry pulls just ride that same allowlist.
-
-On first boot, the startup script clones `api-python-podman`, then `task
-build`s and runs it with Podman directly, no daemon to wait on.
+Egress NetworkPolicy allows DNS/HTTP/HTTPS only, same as any workspace on
+this platform. The startup script clones `api-python-podman` and runs `task
+build`.
 
 **Why a bare `kubernetes_pod`, not a `kubernetes_deployment`**: the pod's
 `count = data.coder_workspace.me.start_count` means Terraform's destroy (on
