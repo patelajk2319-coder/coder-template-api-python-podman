@@ -4,7 +4,7 @@ terraform {
   required_providers {
     coderd = {
       source = "coder/coderd"
-      # Exact, not ~> 0.0 — see templates/api-python-podman-workspace/main.tf
+      # Exact, not ~> 0.0 — see terraform/templates/define/main.tf
       # for why.
       version = "0.0.30"
     }

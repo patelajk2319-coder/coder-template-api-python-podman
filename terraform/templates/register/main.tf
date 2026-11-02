@@ -1,4 +1,4 @@
-# Registers the template at ../../templates/api-python-podman-workspace
+# Registers the template at ../define
 # with the coderd API — defines no workspace resources itself. Run by
 # you, manually, via `task template`.
 
@@ -37,7 +37,7 @@ resource "coderd_template" "api_python_podman_workspace" {
   activity_bump_ms = local.activity_bump_ms
 
   versions = [{
-    directory        = "${path.module}/../../templates/api-python-podman-workspace"
+    directory        = "${path.module}/../define"
     name             = "v${var.template_version}"
     active           = true
     provisioner_tags = local.provisioner_tags

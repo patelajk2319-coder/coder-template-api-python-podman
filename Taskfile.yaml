@@ -34,9 +34,9 @@ tasks:
   validate:
     desc: terraform fmt/validate + shellcheck
     cmds:
-      - terraform -chdir=templates/api-python-podman-workspace fmt -check -diff
-      - terraform -chdir=templates/api-python-podman-workspace validate
-      - terraform -chdir=terraform/template-registration fmt -check -diff
-      - terraform -chdir=terraform/template-registration validate
+      - terraform -chdir=terraform/templates/define fmt -check -diff
+      - terraform -chdir=terraform/templates/define validate
+      - terraform -chdir=terraform/templates/register fmt -check -diff
+      - terraform -chdir=terraform/templates/register validate
       - shellcheck scripts/*.sh scripts/lib/*.sh
 

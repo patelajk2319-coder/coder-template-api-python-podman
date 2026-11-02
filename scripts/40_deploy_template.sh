@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Registers the already-defined template (templates/api-python-podman-workspace)
-# with the Coder control plane via terraform/template-registration (the
+# Registers the already-defined template (terraform/templates/define)
+# with the Coder control plane via terraform/templates/register (the
 # coderd Terraform provider) — this script defines no workspace resources
 # itself, it just pushes a new version of an existing template directory.
 
@@ -8,7 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-TF_DIR="${ROOT_DIR}/terraform/template-registration"
+TF_DIR="${ROOT_DIR}/terraform/templates/register"
 
 # shellcheck source=scripts/lib/coder.sh
 source "${SCRIPT_DIR}/lib/coder.sh"
