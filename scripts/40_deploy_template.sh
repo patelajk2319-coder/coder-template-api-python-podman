@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Push the api-python workspace template to the Coder server via the
-# coderd Terraform provider (terraform/coderd) — replaces the old
-# coder-CLI push + PATCH + edit sequence.
+# Push the api-python-podman workspace template to the Coder server via
+# the coderd Terraform provider (terraform/coderd).
 
 set -euo pipefail
 
@@ -34,7 +33,7 @@ require_coder_reachable
 
 VERSION="$(cat "${ROOT_DIR}/VERSION")"
 
-echo "[----] Pushing api-python-workspace@${VERSION} to ${CODER_URL}..."
+echo "[----] Pushing api-python-podman-workspace@${VERSION} to ${CODER_URL}..."
 terraform -chdir="${TF_DIR}" init -upgrade
 terraform -chdir="${TF_DIR}" apply \
   -var="coder_url=${CODER_URL}" \
@@ -50,7 +49,7 @@ terraform -chdir="${TF_DIR}" apply \
   -auto-approve
 
 echo ""
-echo "[info] api-python-workspace — live"
+echo "[info] api-python-podman-workspace — live"
 echo ""
 echo "[info] version:     ${VERSION}"
 echo "[info] owner:       ${TEMPLATE_OWNER}"
