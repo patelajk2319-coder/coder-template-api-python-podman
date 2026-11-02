@@ -187,22 +187,6 @@ resource "coder_agent" "main" {
     git config --global credential.https://github.com.helper \
       "!f() { echo username=x-access-token; echo password=$${GITHUB_TOKEN}; }; f"
 
-    # ── Podman — rootless, daemonless, no sidecar needed ──────────────────────
-    # Base image's non-root user has passwordless sudo for this.
-    if ! command -v podman &>/dev/null; then
-      sudo apt-get update -qq
-      sudo apt-get install -y -qq podman >/dev/null
-    fi
-
-    # vfs: rootless-safe without extra kernel capabilities (unlike overlay/fuse-overlayfs).
-    mkdir -p "$HOME/.config/containers"
-    if [[ ! -f "$HOME/.config/containers/storage.conf" ]]; then
-      cat > "$HOME/.config/containers/storage.conf" <<-'CONF'
-    [storage]
-    driver = "vfs"
-    CONF
-    fi
-
     # ── go-task — drives the cloned repo's Taskfile ───────────────────────────
     if ! command -v task &>/dev/null; then
       sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b "$HOME/.local/bin" 2>/dev/null
@@ -223,7 +207,8 @@ resource "coder_agent" "main" {
     [[ -d "$HOME/.venv" ]] || python3 -m venv "$HOME/.venv"
     "$HOME/.venv/bin/pip" install --quiet -r "$REPO_DIR/requirements.txt"
 
-    # No daemon to wait on — podman runs immediately.
+    # Podman and fuse-overlayfs ship baked into the image — no daemon to
+    # wait on, no runtime install step.
     cd "$REPO_DIR"
     task build
   EOT
@@ -300,6 +285,11 @@ resource "kubernetes_pod" "workspace" {
     }
     annotations = {
       "coder.com/workspace-id" = data.coder_workspace.me.id
+      # Part of Coder's own documented rootless-Podman recipe
+      # (docker-in-workspaces#rootless-podman) — kept for fidelity even
+      # though fuse-overlayfs (not real multi-UID mapping) is what
+      # actually unblocks the build on this cluster's AL2023 nodes.
+      "container.apparmor.security.beta.kubernetes.io/workspace" = "unconfined"
     }
   }
 
@@ -329,8 +319,11 @@ resource "kubernetes_pod" "workspace" {
     automount_service_account_token = false
 
     container {
-      name    = "workspace"
-      image   = "codercom/enterprise-base:ubuntu"
+      name = "workspace"
+      # Coder's own example image: Podman + fuse-overlayfs preinstalled,
+      # storage.conf already set up for rootless use — no apt-get at
+      # every workspace boot, unlike codercom/enterprise-base:ubuntu.
+      image   = "codercom/example-podman:ubuntu"
       command = ["/bin/bash", "-c", coder_agent.main.init_script]
 
       env {
@@ -346,6 +339,11 @@ resource "kubernetes_pod" "workspace" {
         limits = {
           cpu    = local.size.cpu_lim
           memory = local.size.mem_lim
+          # Schedulable, kubelet-accounted /dev/fuse — granted by
+          # smarter-device-manager on the workspaces node pool (see
+          # coder-team-cluster-demo/terraform/cluster/fuse-device-plugin.tf).
+          # fuse-overlayfs needs this; not a hostPath device mount.
+          "smarter-devices/fuse" = "1"
         }
       }
 

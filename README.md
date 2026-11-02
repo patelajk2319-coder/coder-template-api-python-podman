@@ -27,6 +27,10 @@ doesn't deploy one. Get these from that control plane's platform team:
 - a long-lived API token for the `coderd` Terraform provider
 - GitHub external auth configured, so developers authenticate with their
   own GitHub identity on first build
+- workspaces must land on a node pool running `smarter-device-manager`
+  (coder-team-cluster-demo's `terraform/cluster/fuse-device-plugin.tf`) —
+  rootless Podman's `fuse-overlayfs` driver needs the `smarter-devices/fuse`
+  resource it advertises
 
 ### Required Tools (install via Homebrew)
 ```bash
@@ -57,11 +61,14 @@ Nothing here is auto-populated by scripts — every variable is yours to fill in
 Single Kubernetes pod, one non-root container (`run_as_user = 1000`), with
 `/home/coder` on a `gp3`-backed PVC.
 
-Podman installs via `apt-get` on first boot and builds/runs images directly
-as that same non-root user — no daemon, no sidecar. Storage uses the `vfs`
-driver (`$HOME/.config/containers/storage.conf`), the one driver that works
-rootless without extra kernel capabilities; image layers land on the same
-PVC as `/home/coder`.
+The container image is Coder's own `codercom/example-podman:ubuntu` —
+Podman and `fuse-overlayfs` ship preinstalled and preconfigured, no
+`apt-get` at workspace boot. `fuse-overlayfs` fakes file ownership in
+userspace via FUSE, so it needs `/dev/fuse` (granted as the
+`smarter-devices/fuse` resource, above) but not real multi-UID kernel
+namespace mapping — the `vfs` driver's `newuidmap`/`newgidmap` dance is
+blocked outright on this cluster's AL2023 nodes. Image layers land on
+the same PVC as `/home/coder`.
 
 Egress NetworkPolicy allows DNS/HTTP/HTTPS only, same as any workspace on
 this platform. The startup script clones `api-python-podman` and runs `task
