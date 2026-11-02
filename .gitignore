@@ -1,0 +1,13 @@
+# Environment — contains credentials, never commit
+.env
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Coder provisioner runtime socket (created by coder templates push)
+.coder/
+
+# OS
+.DS_Store

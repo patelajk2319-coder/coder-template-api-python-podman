@@ -1,0 +1,42 @@
+# Deploys the api-python workspace template onto an already-running Coder
+# instance. Coder itself is owned by a separate platform repo — this repo
+# never touches infra, see README Prerequisites.
+
+version: '3'
+
+dotenv: ['.env']
+
+tasks:
+
+  template:
+    desc: Push the workspace template to Coder via Terraform (coderd provider), versioned from VERSION (bump it first for a new revision)
+    cmds:
+      - bash scripts/40_deploy_template.sh
+
+  release:
+    desc: Tag and push the current VERSION as a git release (vX.Y.Z)
+    cmds:
+      - git tag "v$(cat VERSION)"
+      - git push origin "v$(cat VERSION)"
+
+  workspace:
+    desc: Provision a workspace from the template
+    vars:
+      NAME: '{{.NAME | default "dev-workspace"}}'
+    cmds:
+      - bash scripts/workspace.sh "{{.NAME}}"
+
+  logs:
+    desc: Stream startup logs from the active workspace
+    cmds:
+      - bash scripts/logs.sh
+
+  validate:
+    desc: terraform fmt/validate + shellcheck
+    cmds:
+      - terraform -chdir=templates/api-python-podman-workspace fmt -check -diff
+      - terraform -chdir=templates/api-python-podman-workspace validate
+      - terraform -chdir=terraform/coderd fmt -check -diff
+      - terraform -chdir=terraform/coderd validate
+      - shellcheck scripts/*.sh scripts/lib/*.sh
+
