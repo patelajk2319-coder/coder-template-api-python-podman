@@ -1,3 +1,7 @@
+# Registers the template at ../../templates/api-python-podman-workspace
+# with the coderd API — defines no workspace resources itself. Run by
+# you, manually, via `task template`.
+
 data "coderd_organization" "default" {
   is_default = true
 }
@@ -23,6 +27,7 @@ locals {
 }
 
 resource "coderd_template" "api_python_podman_workspace" {
+
   name            = "api-python-podman-workspace"
   display_name    = "API Python Podman Workspace"
   description     = local.governance_description

@@ -5,17 +5,26 @@ Coder workspace template that provisions a developer environment for
 demonstrating rootless Podman on Coder — `podman build`/`podman run` with no
 privileged daemon anywhere in the pod.
 
+## Two Terraform Roots — Not One
+
+This repo has two separate, easy-to-conflate Terraform directories:
+
+| | `templates/api-python-podman-workspace/` | `terraform/template-registration/` |
+|---|---|---|
+| Defines | The workspace itself (pod, PVC, agent) | The *template resource* on Coder's control plane (metadata, versions, TTLs) |
+| Provider | `coder` + `kubernetes` | `coderd` (Coder's admin API) |
+| Runs via | Coder's own provisioner, automatically, on every workspace build | You, manually, via `task template` |
+
+You never run `terraform apply` on `templates/api-python-podman-workspace/`
+yourself — only the provisioner does, as part of building a workspace.
+
 ## Versioning
 `task template` pushes a new Coder template revision named after whatever's
 currently in `VERSION`, so bump it before pushing a new revision (pushing the
 same version name twice fails — Coder requires unique template version names).
-
-`task template` applies `terraform/coderd` (the `coderd` Terraform provider,
-not the `coder` CLI) — a separate Terraform root from
-`templates/api-python-podman-workspace`, which is the workspace template's own
-Terraform, executed by the provisioner on each build. `task workspace` and
-`task logs` still go through the `coder` CLI directly — there's no Terraform
-resource for provisioning an ephemeral workspace or streaming its logs.
+`task workspace` and `task logs` still go through the `coder` CLI directly —
+there's no Terraform resource for provisioning an ephemeral workspace or
+streaming its logs.
 
 ## Prerequisites
 

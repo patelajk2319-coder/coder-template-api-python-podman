@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Push the api-python-podman workspace template to the Coder server via
-# the coderd Terraform provider (terraform/coderd).
+# Registers the already-defined template (templates/api-python-podman-workspace)
+# with the Coder control plane via terraform/template-registration (the
+# coderd Terraform provider) — this script defines no workspace resources
+# itself, it just pushes a new version of an existing template directory.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-TF_DIR="${ROOT_DIR}/terraform/coderd"
+TF_DIR="${ROOT_DIR}/terraform/template-registration"
 
 # shellcheck source=scripts/lib/coder.sh
 source "${SCRIPT_DIR}/lib/coder.sh"

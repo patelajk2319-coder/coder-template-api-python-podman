@@ -36,7 +36,7 @@ tasks:
     cmds:
       - terraform -chdir=templates/api-python-podman-workspace fmt -check -diff
       - terraform -chdir=templates/api-python-podman-workspace validate
-      - terraform -chdir=terraform/coderd fmt -check -diff
-      - terraform -chdir=terraform/coderd validate
+      - terraform -chdir=terraform/template-registration fmt -check -diff
+      - terraform -chdir=terraform/template-registration validate
       - shellcheck scripts/*.sh scripts/lib/*.sh
 
