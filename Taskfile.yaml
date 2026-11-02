@@ -8,6 +8,12 @@ dotenv: ['.env']
 
 tasks:
 
+  up:
+    desc: Full deploy — validate, then push the template. Not task workspace -- first-time GitHub auth is an interactive, one-off step that would block an unattended run.
+    cmds:
+      - task: validate
+      - task: template
+
   template:
     desc: Push the workspace template to Coder via Terraform (coderd provider), versioned from VERSION (bump it first for a new revision)
     cmds:
