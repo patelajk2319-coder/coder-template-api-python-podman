@@ -324,6 +324,27 @@ resource "kubernetes_pod" "workspace" {
       }
     }
 
+    # Each workspace is its own standalone pod, not a Deployment replica —
+    # this spreads *different* workspaces' pods across nodes in the pool,
+    # so one node loss doesn't take out many developers' workspaces at once.
+    affinity {
+      pod_anti_affinity {
+        preferred_during_scheduling_ignored_during_execution {
+          weight = 1 # 1-100, relative priority vs. other preferred rules
+          pod_affinity_term {
+            topology_key = "kubernetes.io/hostname"
+            label_selector {
+              match_expressions {
+                key      = "app"
+                operator = "In"
+                values   = ["coder-workspace"]
+              }
+            }
+          }
+        }
+      }
+    }
+
     # Prevents lateral movement via the K8s API from a compromised workspace.
     automount_service_account_token = false
 
